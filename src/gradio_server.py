@@ -52,20 +52,23 @@ def add_subscription(new_repo):
                 return (
                     f"订阅 {new_repo} 已存在", 
                     update_subscriptions(), 
+                    update_subscriptions(),
                     new_repo, 
                     gr.update(value=f"订阅 {new_repo} 已存在", visible=True)
                 )
             subscription_manager.add_subscription(new_repo)
-            LOG.info(f"添加订阅: {new_repo}")
+            LOG.info(f"添加新订阅: {new_repo}")
             return (
                 f"添加订阅成功: {new_repo}", 
                 update_subscriptions(), 
+                update_subscriptions(),
                 "", 
                 gr.update(value=f"成功添加订阅: {new_repo}", visible=True)
             )
         return (
             "请输入有效的仓库名称", 
             update_subscriptions(), 
+            update_subscriptions(),
             new_repo, 
             gr.update(value="请输入有效的仓库名称", visible=True)
         )
@@ -74,6 +77,7 @@ def add_subscription(new_repo):
         return (
             f"添加订阅失败: {str(e)}", 
             update_subscriptions(), 
+            update_subscriptions(),
             new_repo, 
             gr.update(value=f"添加订阅失败: {str(e)}", visible=True)
         )
@@ -86,11 +90,13 @@ def remove_subscription(repo):
             return (
                 f"删除订阅成功: {repo}", 
                 update_subscriptions(), 
+                update_subscriptions(),
                 gr.update(value=f"成功删除订阅: {repo}", visible=True)
             )
         return (
             "请选择要删除的仓库", 
             update_subscriptions(), 
+            update_subscriptions(),
             gr.update(value="请选择要删除的仓库", visible=True)
         )
     except Exception as e:
@@ -98,6 +104,7 @@ def remove_subscription(repo):
         return (
             f"删除订阅失败: {str(e)}", 
             update_subscriptions(), 
+            update_subscriptions(),
             gr.update(value=f"删除订阅失败: {str(e)}", visible=True)
         )
 
@@ -124,18 +131,32 @@ with gr.Blocks(title="GitHubSentinel") as demo:
                 days_slider = gr.Slider(minimum=1, maximum=30, value=7, step=1, label="报告周期", info="生成项目过去一段时间进展，单位：天")
             
             with gr.Row():
-                clear_btn = gr.Button("Clear")
-                submit_btn = gr.Button("Submit", variant="primary")
+                clear_btn = gr.Button("Clear", size="sm")
+                submit_btn = gr.Button("Submit", variant="primary", size="sm")
+
+            with gr.Accordion("管理订阅", open=True):
+                with gr.Row():
+                    with gr.Column(scale=8):
+                        new_repo_input = gr.Textbox(label="新增订阅", placeholder="输入GitHub仓库名 (例如: owner/repo)")
+                    with gr.Column(scale=2):
+                        add_btn = gr.Button("添加", variant="secondary", size="sm")
+                
+                with gr.Row():
+                    with gr.Column(scale=8):
+                        remove_dropdown = gr.Dropdown(
+                            choices=subscription_manager.list_subscriptions(),
+                            label="选择要删除的订阅",
+                            info="选择要删除的GitHub项目"
+                        )
+                    with gr.Column(scale=2):
+                        remove_btn = gr.Button("删除", variant="stop", size="sm")
+                
+                subscription_msg = gr.Markdown()
 
         with gr.Column(scale=2):
             output_markdown = gr.Markdown()
             output_file = gr.File(label="下载报告")
 
-    with gr.Accordion("管理订阅", open=True) as subscription_accordion:
-        new_repo_input = gr.Textbox(label="新增订阅", placeholder="输入GitHub仓库名 (例如: owner/repo)")
-        add_btn = gr.Button("添加订阅")
-        remove_btn = gr.Button("删除选中的订阅")
-        subscription_msg = gr.Markdown()
 
     selection_type.change(
         update_visibility,
@@ -157,13 +178,13 @@ with gr.Blocks(title="GitHubSentinel") as demo:
     add_btn.click(
         add_subscription,
         inputs=[new_repo_input],
-        outputs=[subscription_msg, repo_dropdown, new_repo_input, notification]
+        outputs=[subscription_msg, repo_dropdown, remove_dropdown, new_repo_input, notification]
     )
 
     remove_btn.click(
         remove_subscription,
-        inputs=[repo_dropdown],
-        outputs=[subscription_msg, repo_dropdown, notification]
+        inputs=[remove_dropdown],
+        outputs=[subscription_msg, repo_dropdown, remove_dropdown, notification]
     )
 
 if __name__ == "__main__":

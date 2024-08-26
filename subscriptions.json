@@ -1,4 +1,5 @@
 [
     "vllm-project/vllm",
-    "ollama/ollama"
+    "ollama/ollama",
+    "o1xhack/glm-role-agent"
 ]
