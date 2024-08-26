@@ -1,7 +1,7 @@
 # src/github_client.py
 
 import requests  # 导入requests库用于HTTP请求
-from datetime import datetime, date, timedelta  # 导入日期处理模块
+from datetime import datetime  # 导入日期处理模块
 import os  # 导入os模块用于文件和目录操作
 from logger import LOG  # 导入日志模块
 
@@ -38,67 +38,73 @@ class GitHubClient:
             return []  # Handle failure case
 
     def fetch_issues(self, repo, since=None, until=None):
-        LOG.debug(f"准备获取 {repo} 的 Issues。")
+        LOG.debug(f"准备获取 {repo} 的 Issues")
         url = f'https://api.github.com/repos/{repo}/issues'  # 构建获取问题的API URL
-        params = {'state': 'closed', 'since': since, 'until': until}
+        params = {'state': 'all'}
+        if since:
+            params['since'] = since
+        # GitHub API doesn't support 'until' for issues, we'll filter it later
+
         try:
             response = requests.get(url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()
-            return response.json()
+            issues = response.json()
+            if until:
+                until_date = datetime.fromisoformat(until.rstrip('Z'))
+                issues = [issue for issue in issues if datetime.fromisoformat(issue['created_at'].rstrip('Z')) <= until_date]
+            return issues
         except Exception as e:
             LOG.error(f"从 {repo} 获取 Issues 失败：{str(e)}")
             LOG.error(f"响应详情：{response.text if 'response' in locals() else '无响应数据可用'}")
             return []
 
     def fetch_pull_requests(self, repo, since=None, until=None):
-        LOG.debug(f"准备获取 {repo} 的 Pull Requests。")
+        LOG.debug(f"准备获取 {repo} 的 Pull Requests")
         url = f'https://api.github.com/repos/{repo}/pulls'  # 构建获取拉取请求的API URL
-        params = {'state': 'closed', 'since': since, 'until': until}
+        params = {'state': 'all'}
+        if since:
+            params['since'] = since
+        # GitHub API doesn't support 'until' for PRs, we'll filter it later
+
         try:
             response = requests.get(url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()  # 确保成功响应
-            return response.json()
+            prs = response.json()
+            if until:
+                until_date = datetime.fromisoformat(until.rstrip('Z'))
+                prs = [pr for pr in prs if datetime.fromisoformat(pr['created_at'].rstrip('Z')) <= until_date]
+            return prs
         except Exception as e:
             LOG.error(f"从 {repo} 获取 Pull Requests 失败：{str(e)}")
             LOG.error(f"响应详情：{response.text if 'response' in locals() else '无响应数据可用'}")
             return []
 
-    def export_daily_progress(self, repo):
-        LOG.debug(f"[准备导出项目进度]：{repo}")
-        today = datetime.now().date().isoformat()  # 获取今天的日期
-        updates = self.fetch_updates(repo, since=today)  # 获取今天的更新数据
+    def export_progress_by_date_range(self, repo, since, until):
+        LOG.debug(f"准备获取 {repo} 从 {since} 到 {until} 的进展")
         
-        repo_dir = os.path.join('daily_progress', repo.replace("/", "_"))  # 构建存储路径
-        os.makedirs(repo_dir, exist_ok=True)  # 确保目录存在
-        
-        file_path = os.path.join(repo_dir, f'{today}.md')  # 构建文件路径
-        with open(file_path, 'w') as file:
-            file.write(f"# Daily Progress for {repo} ({today})\n\n")
-            file.write("\n## Issues Closed Today\n")
-            for issue in updates['issues']:  # 写入今天关闭的问题
-                file.write(f"- {issue['title']} #{issue['number']}\n")
-        
-        LOG.info(f"[{repo}]项目每日进展文件生成： {file_path}")  # 记录日志
-        return file_path
-
-    def export_progress_by_date_range(self, repo, days):
-        today = date.today()  # 获取当前日期
-        since = today - timedelta(days=days)  # 计算开始日期
-        
-        updates = self.fetch_updates(repo, since=since.isoformat(), until=today.isoformat())  # 获取指定日期范围内的更新
+        updates = self.fetch_updates(repo, since=since, until=until)  # 获取指定日期范围内的更新
         
         repo_dir = os.path.join('daily_progress', repo.replace("/", "_"))  # 构建目录路径
         os.makedirs(repo_dir, exist_ok=True)  # 确保目录存在
         
         # 更新文件名以包含日期范围
-        date_str = f"{since}_to_{today}"
+        date_str = f"{since.split('T')[0]}_to_{until.split('T')[0]}"
         file_path = os.path.join(repo_dir, f'{date_str}.md')  # 构建文件路径
         
         with open(file_path, 'w') as file:
-            file.write(f"# Progress for {repo} ({since} to {today})\n\n")
-            file.write(f"\n## Issues Closed in the Last {days} Days\n")
-            for issue in updates['issues']:  # 写入在指定日期内关闭的问题
-                file.write(f"- {issue['title']} #{issue['number']}\n")
+            file.write(f"# Progress for {repo} ({since} to {until})\n\n")
+            
+            file.write("\n## Commits\n")
+            for commit in updates['commits']:
+                file.write(f"- {commit['commit']['message'][:50]}... ({commit['sha'][:7]})\n")
+            
+            file.write(f"\n## Issues\n")
+            for issue in updates['issues']:
+                file.write(f"- {issue['title']} #{issue['number']} ({issue['state']})\n")
+            
+            file.write(f"\n## Pull Requests\n")
+            for pr in updates['pull_requests']:
+                file.write(f"- {pr['title']} #{pr['number']} ({pr['state']})\n")
         
-        LOG.info(f"[{repo}]项目最新进展文件生成： {file_path}")  # 记录日志
+        LOG.info(f"[{repo}]项目进展文件生成： {file_path}")  # 记录日志
         return file_path
